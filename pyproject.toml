@@ -1,0 +1,21 @@
+[project]
+name = "knowledge-graph"
+version = "0.1.0"
+description = "Knowledge Graph"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fsspec>=2025.10.0",
+    "ipykernel>=7.1.0",
+    "langchain-text-splitters>=1.0.0",
+    "neo4j-graphrag>=1.4.0",
+    "neo4j>=5.17.0,<6.0.0",
+    "numpy>=2.3.4",
+    "openai>=2.7.1",
+    "pypdf2>=3.0.1",
+    "pypdf>=3.0.0",
+    "python-dotenv>=1.2.1",
+    "qdrant-client>=1.15.1",
+    "reportlab>=4.4.4",
+    "tiktoken>=0.12.0",
+]
