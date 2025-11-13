@@ -1,26 +1,10 @@
-"""
-Neo4j Graph Store Integration
-Stores entities and relationships in Neo4j
-"""
-
 from typing import List, Dict, Any, Optional
 import neo4j
 import warnings
 
 
 class Neo4jGraphStore:
-    """Manages graph storage in Neo4j"""
-
     def __init__(self, uri: str, username: str, password: str, database: str = "neo4j"):
-        """
-        Initialize Neo4j graph store
-
-        Args:
-            uri: Neo4j database URI
-            username: Neo4j username
-            password: Neo4j password
-            database: Database name
-        """
         self.uri = uri
         self.username = username
         self.password = password
@@ -41,13 +25,11 @@ class Neo4jGraphStore:
             self._connected = False
 
     def _ensure_indexes(self):
-        """Create indexes for better performance"""
         if not self.driver:
             return
 
         try:
             with self.driver.session(database=self.database) as session:
-                # Create index on entity name for faster lookups
                 session.run("""
                     CREATE INDEX entity_name_index IF NOT EXISTS
                     FOR (n:__Entity__)
@@ -57,7 +39,6 @@ class Neo4jGraphStore:
             warnings.warn(f"Failed to create Neo4j indexes: {e}", UserWarning)
 
     def _check_connection(self):
-        """Check if Neo4j connection is available"""
         if not self._connected or not self.driver:
             return False
         try:
@@ -69,7 +50,6 @@ class Neo4jGraphStore:
             return False
 
     def _get_session(self):
-        """Get a Neo4j session if connection is available"""
         if not self._check_connection() or not self.driver:
             return None
         return self.driver.session(database=self.database)
@@ -77,13 +57,6 @@ class Neo4jGraphStore:
     def add_entities(
         self, entities: List[Dict[str, Any]], chunk_id: Optional[str] = None
     ):
-        """
-        Add entities to Neo4j
-
-        Args:
-            entities: List of entity dictionaries
-            chunk_id: Optional chunk ID to link entities to
-        """
         if not self._check_connection() or not self.driver:
             return
 
@@ -93,11 +66,9 @@ class Neo4jGraphStore:
                     labels = entity.get("labels", ["Entity"])
                     properties = entity.get("properties", {})
 
-                    # Ensure name exists
                     if "name" not in properties:
                         continue
 
-                    # Create entity node
                     label_str = ":".join(labels)
                     query = f"""
                         MERGE (e:__Entity__:{label_str} {{name: $name}})
@@ -113,7 +84,6 @@ class Neo4jGraphStore:
                     single_result = result.single()
                     node_id = single_result["node_id"] if single_result else None
 
-                    # Link to chunk if provided
                     if chunk_id and node_id:
                         session.run(  # type: ignore
                             """
@@ -128,12 +98,6 @@ class Neo4jGraphStore:
             warnings.warn(f"Failed to add entities to Neo4j: {e}", UserWarning)
 
     def add_relationships(self, relationships: List[Dict[str, Any]]):
-        """
-        Add relationships to Neo4j
-
-        Args:
-            relationships: List of relationship dictionaries
-        """
         if not self._check_connection() or not self.driver:
             return
 
@@ -165,13 +129,6 @@ class Neo4jGraphStore:
             warnings.warn(f"Failed to add relationships to Neo4j: {e}", UserWarning)
 
     def add_chunk(self, chunk: Dict[str, Any], chunk_id: str):
-        """
-        Add chunk node to Neo4j
-
-        Args:
-            chunk: Chunk dictionary
-            chunk_id: Unique chunk ID
-        """
         if not self._check_connection() or not self.driver:
             return
 
@@ -199,16 +156,6 @@ class Neo4jGraphStore:
     def get_entities_from_chunks(
         self, chunk_ids: List[str], max_depth: int = 2
     ) -> List[Dict[str, Any]]:
-        """
-        Get entities connected to chunks, with graph traversal
-
-        Args:
-            chunk_ids: List of chunk IDs
-            max_depth: Maximum depth to traverse from chunks
-
-        Returns:
-            List of entities with their relationships
-        """
         if not self._check_connection() or not self.driver:
             return []
 
@@ -244,16 +191,6 @@ class Neo4jGraphStore:
     def get_related_entities(
         self, entity_name: str, max_depth: int = 2
     ) -> List[Dict[str, Any]]:
-        """
-        Get entities related to a given entity
-
-        Args:
-            entity_name: Name of the entity
-            max_depth: Maximum depth to traverse
-
-        Returns:
-            List of related entities
-        """
         if not self._check_connection() or not self.driver:
             return []
 
@@ -289,7 +226,6 @@ class Neo4jGraphStore:
             return []
 
     def clear_all(self):
-        """Clear all data from Neo4j"""
         if not self._check_connection() or not self.driver:
             return
 
@@ -300,7 +236,6 @@ class Neo4jGraphStore:
             warnings.warn(f"Failed to clear Neo4j data: {e}", UserWarning)
 
     def close(self):
-        """Close the driver connection"""
         if self.driver:
             try:
                 self.driver.close()

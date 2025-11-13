@@ -1,34 +1,16 @@
-"""
-PDF Reader Module
-Extracts text from PDF files
-"""
-
 from typing import Optional
 import os
 
 
 class PDFReader:
-    """Reads text from PDF files"""
-
     def __init__(self):
-        """Initialize PDF reader"""
         pass
 
     def read_pdf(self, pdf_path: str) -> str:
-        """
-        Extract text from PDF file
-
-        Args:
-            pdf_path: Path to PDF file
-
-        Returns:
-            Extracted text from PDF
-        """
         if not os.path.exists(pdf_path):
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
         try:
-            # Try using pypdf (newer library)
             from pypdf import PdfReader as PyPDFReader
 
             reader = PyPDFReader(pdf_path)
@@ -43,7 +25,6 @@ class PDFReader:
 
         except ImportError:
             try:
-                # Fallback to PyPDF2 (older library)
                 import PyPDF2
 
                 with open(pdf_path, "rb") as file:
@@ -69,17 +50,6 @@ class PDFReader:
         start_page: Optional[int] = None,
         end_page: Optional[int] = None,
     ) -> str:
-        """
-        Extract text from specific pages of PDF
-
-        Args:
-            pdf_path: Path to PDF file
-            start_page: Start page (0-indexed, None for first page)
-            end_page: End page (0-indexed, None for last page)
-
-        Returns:
-            Extracted text from specified pages
-        """
         if not os.path.exists(pdf_path):
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
@@ -92,7 +62,6 @@ class PDFReader:
             start = start_page if start_page is not None else 0
             end = end_page if end_page is not None else total_pages
 
-            # Validate page range
             start = max(0, min(start, total_pages - 1))
             end = max(start + 1, min(end, total_pages))
 
