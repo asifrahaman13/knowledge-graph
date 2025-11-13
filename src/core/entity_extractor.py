@@ -1,9 +1,11 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import asyncio
+import hashlib
 from openai import OpenAI, AsyncOpenAI
 
 from ..config.models import LLMModels
+from ..storage.redis_cache import RedisCache
 
 
 LEGAL_SYSTEM_PROMPT = """
@@ -111,12 +113,32 @@ Important:
 
 
 class EntityRelationshipExtractor:
-    def __init__(self, api_key: str, model: str = LLMModels.GPT_4_POINT_1.value):
+    def __init__(
+        self,
+        api_key: str,
+        model: str = LLMModels.GPT_4_POINT_1.value,
+        redis_cache: Optional[RedisCache] = None,
+        cache_ttl: int = 86400 * 7,  # 7 days for extractions
+    ):
         self.client = OpenAI(api_key=api_key)
         self.async_client = AsyncOpenAI(api_key=api_key)
         self.model = model
+        self.cache = redis_cache
+        self.cache_ttl = cache_ttl
+
+    def _get_cache_key(self, text: str) -> str:
+        """Generate cache key for extraction."""
+        text_hash = hashlib.sha256(f"{self.model}:{text}".encode()).hexdigest()
+        return f"extraction:{self.model}:{text_hash}"
 
     def extract(self, text: str) -> Dict[str, Any]:
+        # Check cache first
+        if self.cache:
+            cache_key = self._get_cache_key(text)
+            cached = self.cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         prompt = self._create_extraction_prompt(text)
 
         try:
@@ -135,13 +157,28 @@ class EntityRelationshipExtractor:
                 raise Exception("LLM returned empty response")
 
             result = json.loads(content)
+            validated_result = self._validate_result(result)
 
-            return self._validate_result(result)
+            # Cache the result
+            if self.cache:
+                cache_key = self._get_cache_key(text)
+                self.cache.set(
+                    cache_key, validated_result, ttl=self.cache_ttl, serialize=True
+                )
+
+            return validated_result
 
         except Exception as e:
             raise Exception(f"Error extracting entities: {e}")
 
     async def async_extract(self, text: str) -> Dict[str, Any]:
+        # Check cache first
+        if self.cache:
+            cache_key = self._get_cache_key(text)
+            cached = await self.cache.async_get(cache_key)
+            if cached is not None:
+                return cached
+
         prompt = self._create_extraction_prompt(text)
 
         try:
@@ -160,8 +197,16 @@ class EntityRelationshipExtractor:
                 raise Exception("LLM returned empty response")
 
             result = json.loads(content)
+            validated_result = self._validate_result(result)
 
-            return self._validate_result(result)
+            # Cache the result
+            if self.cache:
+                cache_key = self._get_cache_key(text)
+                await self.cache.async_set(
+                    cache_key, validated_result, ttl=self.cache_ttl, serialize=True
+                )
+
+            return validated_result
 
         except Exception as e:
             raise Exception(f"Error extracting entities: {e}")

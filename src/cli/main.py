@@ -13,7 +13,13 @@ from ..config.config import (
     QDRANT_API_KEY,
     ELASTICSEARCH_URL,
     ELASTICSEARCH_API_KEY,
+    REDIS_HOST,
+    REDIS_PORT,
+    REDIS_PASSWORD,
+    REDIS_DB,
+    REDIS_DEFAULT_TTL,
 )
+from ..storage.redis_cache import RedisCache
 
 
 async def upload_pdf(
@@ -24,6 +30,18 @@ async def upload_pdf(
     max_concurrent_batches: int = 3,
     clear_existing: bool = False,
 ):
+    log.info("=" * 60)
+    log.info("Initializing Redis Cache")
+    log.info("=" * 60)
+
+    redis_cache = RedisCache(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        password=REDIS_PASSWORD,
+        db=REDIS_DB,
+        default_ttl=REDIS_DEFAULT_TTL,
+    )
+
     log.info("=" * 60)
     log.info("Initializing Knowledge Graph Builder")
     log.info("=" * 60)
@@ -39,6 +57,7 @@ async def upload_pdf(
         elasticsearch_api_key=ELASTICSEARCH_API_KEY,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
+        redis_cache=redis_cache,
     )
 
     if clear_existing:
@@ -105,6 +124,18 @@ async def search_query(
     keyword_weight: float = 0.3,
 ):
     log.info("=" * 60)
+    log.info("Initializing Redis Cache")
+    log.info("=" * 60)
+
+    redis_cache = RedisCache(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        password=REDIS_PASSWORD,
+        db=REDIS_DB,
+        default_ttl=REDIS_DEFAULT_TTL,
+    )
+
+    log.info("=" * 60)
     log.info("Initializing Knowledge Graph Builder")
     log.info("=" * 60)
 
@@ -117,6 +148,7 @@ async def search_query(
         qdrant_api_key=QDRANT_API_KEY,
         elasticsearch_url=ELASTICSEARCH_URL,
         elasticsearch_api_key=ELASTICSEARCH_API_KEY,
+        redis_cache=redis_cache,
     )
 
     log.info("=" * 60)
@@ -133,6 +165,7 @@ async def search_query(
         use_hybrid_search=use_hybrid_search,
         vector_weight=vector_weight,
         keyword_weight=keyword_weight,
+        redis_cache=redis_cache,
     )
 
     search_type = (

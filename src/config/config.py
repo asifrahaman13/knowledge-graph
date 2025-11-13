@@ -13,3 +13,9 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 
 ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", None)
 ELASTICSEARCH_API_KEY = os.getenv("ELASTICSEARCH_API_KEY", None)
+
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+REDIS_DEFAULT_TTL = int(os.getenv("REDIS_DEFAULT_TTL", "86400"))  # 24 hours

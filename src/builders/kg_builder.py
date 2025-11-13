@@ -8,6 +8,7 @@ from ..core.logger import log
 from ..storage.qdrant_store import QdrantVectorStore
 from ..storage.neo4j_store import Neo4jGraphStore
 from ..storage.elasticsearch_store import ElasticsearchStore
+from ..storage.redis_cache import RedisCache
 from ..config.models import LLMModels, EmbeddingModels, IndexNames
 
 
@@ -26,14 +27,19 @@ class KnowledgeGraphBuilder:
         chunk_overlap: int = 100,
         embedding_model: str = EmbeddingModels.TEXT_EMBEDDING_3_LARGE.value,
         llm_model: str = LLMModels.GPT_4_POINT_1.value,
+        redis_cache: Optional[RedisCache] = None,
     ):
         self.chunker = TextChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-        self.embedder = EmbeddingGenerator(openai_api_key, embedding_model)
-        self.extractor = EntityRelationshipExtractor(openai_api_key, llm_model)
+        self.embedder = EmbeddingGenerator(
+            openai_api_key, embedding_model, redis_cache=redis_cache
+        )
+        self.extractor = EntityRelationshipExtractor(
+            openai_api_key, llm_model, redis_cache=redis_cache
+        )
 
         dimension = self.embedder.get_dimension()
         self.vector_store = QdrantVectorStore(
-            collection_name="text_chunks",
+            collection_name=IndexNames.LEGAL_DOCS.value,
             url=qdrant_url,
             api_key=qdrant_api_key,
             dimension=dimension,
@@ -66,7 +72,7 @@ class KnowledgeGraphBuilder:
         all_entities = []
         all_relationships = []
 
-        for i, chunk in enumerate(chunks):
+        for i, chunk in enumerate[dict[Any, Any]](chunks):
             chunk_id = f"{document_id}_chunk_{i}"
             chunk["chunk_id"] = chunk_id
             chunk["document_id"] = document_id

@@ -6,7 +6,6 @@ from ..core.logger import log
 
 
 def _extract_page_text(args: Tuple[str, int]) -> Tuple[int, str]:
-    """Extract text from a single PDF page (for multiprocessing)."""
     pdf_path, page_num = args
     try:
         from pypdf import PdfReader as PyPDFReader
