@@ -134,11 +134,13 @@ class KnowledgeGraphBuilder:
 
         all_entities = []
         all_relationships = []
+        chunk_ids = []
 
-        for i, chunk in enumerate(chunks):
+        for i, chunk in enumerate[dict[Any, Any]](chunks):
             chunk_id = f"{document_id}_chunk_{batch_offset + i}"
             chunk["chunk_id"] = chunk_id
             chunk["document_id"] = document_id
+            chunk_ids.append(chunk_id)
 
             extraction = extractions[i]
             entities = extraction.get("nodes", [])
@@ -147,13 +149,22 @@ class KnowledgeGraphBuilder:
             all_entities.extend(entities)
             all_relationships.extend(relationships)
 
-            self.graph_store.add_chunk(chunk, chunk_id)
+        log.debug(
+            f"Processing {len(chunks)} chunks, {len(all_entities)} entities, {len(all_relationships)} relationships"
+        )
 
-            self.graph_store.add_entities(entities, chunk_id)
+        qdrant_task = self.vector_store.async_add_chunks(chunks, embeddings)
+        elasticsearch_task = self.elasticsearch_store.async_add_chunks(chunks)
 
-        self.vector_store.add_chunks(chunks, embeddings)
+        await asyncio.gather(qdrant_task, elasticsearch_task)
 
-        self.elasticsearch_store.add_chunks(chunks)
+        self.graph_store.add_chunks_batch(chunks, chunk_ids)
+
+        for i, (chunk, chunk_id) in enumerate(zip(chunks, chunk_ids)):
+            extraction = extractions[i]
+            entities = extraction.get("nodes", [])
+            if entities:
+                self.graph_store.add_entities(entities, chunk_id)
 
         self.graph_store.add_relationships(all_relationships)
 
@@ -182,20 +193,25 @@ class KnowledgeGraphBuilder:
             async with semaphore:
                 batch_offset = batch_idx * 10000
 
+                log.info(f"Processing batch {batch_idx} of {len(text_batches)}")
                 return await self.async_build_from_text_batch(
                     batch_text, document_id=document_id, batch_offset=batch_offset
                 )
 
         tasks = [
             process_batch_with_offset(batch, idx)
-            for idx, batch in enumerate(text_batches)
+            for idx, batch in enumerate[str](text_batches)
         ]
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=False)
 
         total_chunks = sum(r["chunks_created"] for r in results)
-        total_entities = sum(r["entities_extracted"] for r in results)
-        total_relationships = sum(r["relationships_extracted"] for r in results)
-        total_embeddings = sum(r["embeddings_generated"] for r in results)
+        total_entities = sum(r["entities_extracted"] for r in results if r is not None)
+        total_relationships = sum(
+            r["relationships_extracted"] for r in results if r is not None
+        )
+        total_embeddings = sum(
+            r["embeddings_generated"] for r in results if r is not None
+        )
 
         return {
             "document_id": document_id,
@@ -208,7 +224,21 @@ class KnowledgeGraphBuilder:
 
     def clear_all(self):
         log.info("Clearing all data...")
-        self.vector_store.delete_collection()
-        self.elasticsearch_store.delete_index()
-        self.graph_store.clear_all()
+        from concurrent.futures import ThreadPoolExecutor
+        from multiprocessing import cpu_count
+
+        max_workers = cpu_count()
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(self.vector_store.delete_collection),
+                executor.submit(self.elasticsearch_store.delete_index),
+                executor.submit(self.graph_store.clear_all),
+            ]
+            for future in futures:
+                try:
+                    future.result()
+                except Exception as e:
+                    log.warning(f"Error during cleanup: {e}")
+
         log.info("All data cleared")

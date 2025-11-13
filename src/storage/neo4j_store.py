@@ -1,6 +1,18 @@
 from typing import List, Dict, Any, Optional
 import neo4j
 import warnings
+import re
+
+
+def sanitize_label(label: str) -> str:
+    if not label:
+        return "Entity"
+
+    sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", label)
+    if sanitized and not sanitized[0].isalpha() and sanitized[0] != "_":
+        sanitized = "_" + sanitized
+
+    return sanitized if sanitized else "Entity"
 
 
 class Neo4jGraphStore:
@@ -60,40 +72,67 @@ class Neo4jGraphStore:
         if not self._check_connection() or not self.driver:
             return
 
+        if not entities:
+            return
+
         try:
             with self.driver.session(database=self.database) as session:
-                for entity in entities:
-                    labels = entity.get("labels", ["Entity"])
-                    properties = entity.get("properties", {})
+                if chunk_id:
+                    for entity in entities:
+                        labels = entity.get("labels", ["Entity"])
+                        properties = entity.get("properties", {})
 
-                    if "name" not in properties:
-                        continue
+                        if "name" not in properties:
+                            continue
 
-                    label_str = ":".join(labels)
-                    query = f"""
-                        MERGE (e:__Entity__:{label_str} {{name: $name}})
-                        SET e += $properties
-                        RETURN elementId(e) as node_id
-                    """
-
-                    result = session.run(
-                        query,  # type: ignore
-                        name=properties["name"],
-                        properties=properties,
-                    )
-                    single_result = result.single()
-                    node_id = single_result["node_id"] if single_result else None
-
-                    if chunk_id and node_id:
-                        session.run(  # type: ignore
-                            """
-                            MATCH (c:Chunk {chunk_id: $chunk_id})
-                            MATCH (e) WHERE elementId(e) = $node_id
+                        sanitized_labels = [sanitize_label(label) for label in labels]
+                        label_str = ":".join(sanitized_labels)
+                        query = f"""
+                            MERGE (e:__Entity__:{label_str} {{name: $name}})
+                            SET e += $properties
+                            WITH e, elementId(e) as node_id
+                            MATCH (c:Chunk {{chunk_id: $chunk_id}})
                             MERGE (c)-[:CONTAINS_ENTITY]->(e)
-                        """,
+                            RETURN node_id
+                        """
+
+                        session.run(
+                            query,  # type: ignore
+                            name=properties["name"],
+                            properties=properties,
                             chunk_id=chunk_id,
-                            node_id=node_id,
                         )
+                else:
+                    batch_size = 100
+                    for i in range(0, len(entities), batch_size):
+                        batch = entities[i : i + batch_size]
+                        query_parts = []
+                        params = {}
+
+                        for idx, entity in enumerate(batch):
+                            labels = entity.get("labels", ["Entity"])
+                            properties = entity.get("properties", {})
+
+                            if "name" not in properties:
+                                continue
+
+                            sanitized_labels = [
+                                sanitize_label(label) for label in labels
+                            ]
+                            label_str = ":".join(sanitized_labels)
+                            name_key = f"name_{idx}"
+                            props_key = f"props_{idx}"
+
+                            query_parts.append(f"""
+                                MERGE (e{idx}:__Entity__:{label_str} {{name: ${name_key}}})
+                                SET e{idx} += ${props_key}
+                            """)
+                            params[name_key] = properties["name"]
+                            params[props_key] = properties
+
+                        if query_parts:
+                            batch_query = " ".join(query_parts)
+                            session.run(batch_query, **params)  # type: ignore
         except Exception as e:
             warnings.warn(f"Failed to add entities to Neo4j: {e}", UserWarning)
 
@@ -101,32 +140,92 @@ class Neo4jGraphStore:
         if not self._check_connection() or not self.driver:
             return
 
+        if not relationships:
+            return
+
         try:
             with self.driver.session(database=self.database) as session:
-                for rel in relationships:
-                    rel_type = rel.get("type", "RELATED_TO")
-                    source_name = rel.get("source")
-                    target_name = rel.get("target")
-                    properties = rel.get("properties", {})
+                batch_size = 50
+                for i in range(0, len(relationships), batch_size):
+                    batch = relationships[i : i + batch_size]
+                    query_parts = []
+                    params = {}
 
-                    if not source_name or not target_name:
-                        continue
+                    for idx, rel in enumerate(batch):
+                        rel_type = rel.get("type", "RELATED_TO")
+                        source_name = rel.get("source")
+                        target_name = rel.get("target")
+                        properties = rel.get("properties", {})
 
-                    query = f"""
-                        MATCH (source:__Entity__ {{name: $source_name}})
-                        MATCH (target:__Entity__ {{name: $target_name}})
-                        MERGE (source)-[r:{rel_type}]->(target)
-                        SET r += $properties
-                    """
+                        if not source_name or not target_name:
+                            continue
 
-                    session.run(
-                        query,  # type: ignore
-                        source_name=source_name,
-                        target_name=target_name,
-                        properties=properties,
-                    )
+                        sanitized_rel_type = sanitize_label(rel_type)
+                        source_key = f"source_{idx}"
+                        target_key = f"target_{idx}"
+                        props_key = f"props_{idx}"
+
+                        query_parts.append(f"""
+                            MATCH (s{idx}:__Entity__ {{name: ${source_key}}})
+                            MATCH (t{idx}:__Entity__ {{name: ${target_key}}})
+                            MERGE (s{idx})-[r{idx}:{sanitized_rel_type}]->(t{idx})
+                            SET r{idx} += ${props_key}
+                        """)
+                        params[source_key] = source_name
+                        params[target_key] = target_name
+                        params[props_key] = properties
+
+                    if query_parts:
+                        batch_query = " ".join(query_parts)
+                        session.run(batch_query, **params)  # type: ignore
         except Exception as e:
             warnings.warn(f"Failed to add relationships to Neo4j: {e}", UserWarning)
+
+    def add_chunks_batch(self, chunks: List[Dict[str, Any]], chunk_ids: List[str]):
+        """Add multiple chunks in a single batch operation."""
+        if not self._check_connection() or not self.driver:
+            return
+
+        if not chunks or not chunk_ids or len(chunks) != len(chunk_ids):
+            return
+
+        try:
+            with self.driver.session(database=self.database) as session:
+                batch_size = 100
+                for i in range(0, len(chunks), batch_size):
+                    batch_chunks = chunks[i : i + batch_size]
+                    batch_ids = chunk_ids[i : i + batch_size]
+
+                    query_parts = []
+                    params = {}
+
+                    for idx, (chunk, chunk_id) in enumerate(
+                        zip(batch_chunks, batch_ids)
+                    ):
+                        cid_key = f"chunk_id_{idx}"
+                        text_key = f"text_{idx}"
+                        idx_key = f"chunk_index_{idx}"
+                        start_key = f"start_char_{idx}"
+                        end_key = f"end_char_{idx}"
+
+                        query_parts.append(f"""
+                            MERGE (c{idx}:Chunk {{chunk_id: ${cid_key}}})
+                            SET c{idx}.text = ${text_key},
+                                c{idx}.chunk_index = ${idx_key},
+                                c{idx}.start_char = ${start_key},
+                                c{idx}.end_char = ${end_key}
+                        """)
+                        params[cid_key] = chunk_id
+                        params[text_key] = chunk.get("text", "")
+                        params[idx_key] = chunk.get("chunk_index", 0)
+                        params[start_key] = chunk.get("start_char", 0)
+                        params[end_key] = chunk.get("end_char", 0)
+
+                    if query_parts:
+                        batch_query = " ".join(query_parts)
+                        session.run(batch_query, **params)  # type: ignore
+        except Exception as e:
+            warnings.warn(f"Failed to add chunks batch to Neo4j: {e}", UserWarning)
 
     def add_chunk(self, chunk: Dict[str, Any], chunk_id: str):
         if not self._check_connection() or not self.driver:
