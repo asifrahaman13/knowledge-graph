@@ -73,7 +73,7 @@ class Neo4jGraphStore:
                     query = f"""
                         MERGE (e:__Entity__:{label_str} {{name: $name}})
                         SET e += $properties
-                        RETURN id(e) as node_id
+                        RETURN elementId(e) as node_id
                     """
 
                     result = session.run(
@@ -88,7 +88,7 @@ class Neo4jGraphStore:
                         session.run(  # type: ignore
                             """
                             MATCH (c:Chunk {chunk_id: $chunk_id})
-                            MATCH (e) WHERE id(e) = $node_id
+                            MATCH (e) WHERE elementId(e) = $node_id
                             MERGE (c)-[:CONTAINS_ENTITY]->(e)
                         """,
                             chunk_id=chunk_id,
