@@ -8,7 +8,7 @@ from ..core.logger import log
 from ..storage.qdrant_store import QdrantVectorStore
 from ..storage.neo4j_store import Neo4jGraphStore
 from ..storage.elasticsearch_store import ElasticsearchStore
-from ..config.models import LLMModels, EmbeddingModels
+from ..config.models import LLMModels, EmbeddingModels, IndexNames
 
 
 class KnowledgeGraphBuilder:
@@ -42,7 +42,7 @@ class KnowledgeGraphBuilder:
             uri=neo4j_uri, username=neo4j_username, password=neo4j_password
         )
         self.elasticsearch_store = ElasticsearchStore(
-            index_name="legal-docs",
+            index_name=IndexNames.LEGAL_DOCS.value,
             url=elasticsearch_url,
             api_key=elasticsearch_api_key,
         )

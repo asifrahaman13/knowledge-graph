@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 import uuid
+from ..core.logger import log
 
 
 class QdrantVectorStore:
@@ -18,10 +19,7 @@ class QdrantVectorStore:
         if url:
             self.client = QdrantClient(url=url, api_key=api_key)
         else:
-            try:
-                self.client = QdrantClient(path="./qdrant_db")
-            except Exception:
-                self.client = QdrantClient(location=":memory:")
+            log.error("No URL provided for Qdrant")
 
         self._ensure_collection()
 

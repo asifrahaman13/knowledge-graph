@@ -4,12 +4,13 @@ from elasticsearch.helpers import bulk
 import uuid
 import warnings
 from ..core.logger import log
+from ..config.models import IndexNames
 
 
 class ElasticsearchStore:
     def __init__(
         self,
-        index_name: str = "legal-docs",
+        index_name: str = IndexNames.LEGAL_DOCS.value,
         url: Optional[str] = None,
         api_key: Optional[str] = None,
     ):

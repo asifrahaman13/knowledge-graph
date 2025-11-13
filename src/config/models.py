@@ -15,3 +15,7 @@ class EmbeddingModels(Enum):
     TEXT_EMBEDDING_3_X_SMALL = "text-embedding-3-x-small"
     TEXT_EMBEDDING_3_X_LARGE = "text-embedding-3-x-large"
     TEXT_EMBEDDING_3_X_MEDIUM = "text-embedding-3-x-medium"
+
+
+class IndexNames(Enum):
+    LEGAL_DOCS = "legal-docs"
