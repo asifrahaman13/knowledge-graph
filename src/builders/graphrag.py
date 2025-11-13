@@ -1,9 +1,9 @@
 from typing import List, Dict, Any
-from embeddings import EmbeddingGenerator
-from qdrant_store import QdrantVectorStore
-from neo4j_store import Neo4jGraphStore
+from ..core.embeddings import EmbeddingGenerator
+from ..storage.qdrant_store import QdrantVectorStore
+from ..storage.neo4j_store import Neo4jGraphStore
 from openai import OpenAI
-from models import LLMModels
+from ..config.models import LLMModels
 
 
 class GraphRAG:

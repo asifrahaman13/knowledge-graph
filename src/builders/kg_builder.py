@@ -1,12 +1,12 @@
 from typing import Dict, Any, Optional, List
 import uuid
 import asyncio
-from text_chunker import TextChunker
-from embeddings import EmbeddingGenerator
-from entity_extractor import EntityRelationshipExtractor
-from qdrant_store import QdrantVectorStore
-from neo4j_store import Neo4jGraphStore
-from models import LLMModels, EmbeddingModels
+from ..core.text_chunker import TextChunker
+from ..core.embeddings import EmbeddingGenerator
+from ..core.entity_extractor import EntityRelationshipExtractor
+from ..storage.qdrant_store import QdrantVectorStore
+from ..storage.neo4j_store import Neo4jGraphStore
+from ..config.models import LLMModels, EmbeddingModels
 
 
 class KnowledgeGraphBuilder:

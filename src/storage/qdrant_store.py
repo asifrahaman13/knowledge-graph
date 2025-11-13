@@ -18,7 +18,10 @@ class QdrantVectorStore:
         if url:
             self.client = QdrantClient(url=url, api_key=api_key)
         else:
-            print("No Qdrant URL provided")
+            try:
+                self.client = QdrantClient(path="./qdrant_db")
+            except Exception:
+                self.client = QdrantClient(location=":memory:")
 
         self._ensure_collection()
 

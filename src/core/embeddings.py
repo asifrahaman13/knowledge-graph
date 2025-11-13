@@ -1,7 +1,7 @@
 from typing import List
 import asyncio
 from openai import OpenAI, AsyncOpenAI
-from models import EmbeddingModels
+from ..config.models import EmbeddingModels
 
 
 class EmbeddingGenerator:

@@ -1,5 +1,5 @@
 from typing import List, Tuple
-from pdf_reader import PDFReader
+from .pdf_reader import PDFReader
 
 
 class PDFProcessor:
