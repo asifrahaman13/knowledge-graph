@@ -4,8 +4,10 @@ import asyncio
 from ..core.text_chunker import TextChunker
 from ..core.embeddings import EmbeddingGenerator
 from ..core.entity_extractor import EntityRelationshipExtractor
+from ..core.logger import log
 from ..storage.qdrant_store import QdrantVectorStore
 from ..storage.neo4j_store import Neo4jGraphStore
+from ..storage.elasticsearch_store import ElasticsearchStore
 from ..config.models import LLMModels, EmbeddingModels
 
 
@@ -18,6 +20,8 @@ class KnowledgeGraphBuilder:
         neo4j_password: str,
         qdrant_url: Optional[str] = None,
         qdrant_api_key: Optional[str] = None,
+        elasticsearch_url: Optional[str] = None,
+        elasticsearch_api_key: Optional[str] = None,
         chunk_size: int = 500,
         chunk_overlap: int = 100,
         embedding_model: str = EmbeddingModels.TEXT_EMBEDDING_3_LARGE.value,
@@ -37,6 +41,11 @@ class KnowledgeGraphBuilder:
         self.graph_store = Neo4jGraphStore(
             uri=neo4j_uri, username=neo4j_username, password=neo4j_password
         )
+        self.elasticsearch_store = ElasticsearchStore(
+            index_name="legal-docs",
+            url=elasticsearch_url,
+            api_key=elasticsearch_api_key,
+        )
 
     def build_from_text(
         self, text: str, document_id: Optional[str] = None
@@ -44,16 +53,16 @@ class KnowledgeGraphBuilder:
         if not document_id:
             document_id = str(uuid.uuid4())
 
-        print("Step 1: Chunking text...")
+        log.info("Step 1: Chunking text...")
         chunks = self.chunker.chunk_text(text)
-        print(f"Created {len(chunks)} chunks")
+        log.info(f"Created {len(chunks)} chunks")
 
-        print("Step 2: Generating embeddings...")
+        log.info("Step 2: Generating embeddings...")
         chunk_texts = [chunk["text"] for chunk in chunks]
         embeddings = self.embedder.embed_batch(chunk_texts)
-        print(f"Generated {len(embeddings)} embeddings")
+        log.info(f"Generated {len(embeddings)} embeddings")
 
-        print("Step 3: Extracting entities and relationships...")
+        log.info("Step 3: Extracting entities and relationships...")
         all_entities = []
         all_relationships = []
 
@@ -73,17 +82,21 @@ class KnowledgeGraphBuilder:
 
             self.graph_store.add_entities(entities, chunk_id)
 
-        print(
+        log.info(
             f"Extracted {len(all_entities)} entities and {len(all_relationships)} relationships"
         )
 
-        print("Step 4: Storing chunks in Qdrant...")
+        log.info("Step 4: Storing chunks in Qdrant...")
         self.vector_store.add_chunks(chunks, embeddings)
-        print("Chunks stored in Qdrant")
+        log.info("Chunks stored in Qdrant")
 
-        print("Step 5: Storing relationships in Neo4j...")
+        log.info("Step 5: Storing chunks in Elasticsearch...")
+        self.elasticsearch_store.add_chunks(chunks)
+        log.info("Chunks stored in Elasticsearch")
+
+        log.info("Step 6: Storing relationships in Neo4j...")
         self.graph_store.add_relationships(all_relationships)
-        print("Relationships stored in Neo4j")
+        log.info("Relationships stored in Neo4j")
 
         return {
             "document_id": document_id,
@@ -140,6 +153,8 @@ class KnowledgeGraphBuilder:
 
         self.vector_store.add_chunks(chunks, embeddings)
 
+        self.elasticsearch_store.add_chunks(chunks)
+
         self.graph_store.add_relationships(all_relationships)
 
         return {
@@ -192,7 +207,8 @@ class KnowledgeGraphBuilder:
         }
 
     def clear_all(self):
-        print("Clearing all data...")
+        log.info("Clearing all data...")
         self.vector_store.delete_collection()
+        self.elasticsearch_store.delete_index()
         self.graph_store.clear_all()
-        print("All data cleared")
+        log.info("All data cleared")

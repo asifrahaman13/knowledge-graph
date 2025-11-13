@@ -3,6 +3,7 @@ import argparse
 from ..builders.kg_builder import KnowledgeGraphBuilder
 from ..builders.graphrag import GraphRAG
 from ..processors.pdf_processor import PDFProcessor
+from ..core.logger import log
 from ..config.config import (
     OPENAI_API_KEY,
     NEO4J_URI,
@@ -10,6 +11,8 @@ from ..config.config import (
     NEO4J_PASSWORD,
     QDRANT_URL,
     QDRANT_API_KEY,
+    ELASTICSEARCH_URL,
+    ELASTICSEARCH_API_KEY,
 )
 
 
@@ -21,9 +24,9 @@ async def upload_pdf(
     max_concurrent_batches: int = 3,
     clear_existing: bool = False,
 ):
-    print("=" * 60)
-    print("Initializing Knowledge Graph Builder")
-    print("=" * 60)
+    log.info("=" * 60)
+    log.info("Initializing Knowledge Graph Builder")
+    log.info("=" * 60)
 
     kg_builder = KnowledgeGraphBuilder(
         openai_api_key=OPENAI_API_KEY,
@@ -32,57 +35,62 @@ async def upload_pdf(
         neo4j_password=NEO4J_PASSWORD,
         qdrant_url=QDRANT_URL,
         qdrant_api_key=QDRANT_API_KEY,
+        elasticsearch_url=ELASTICSEARCH_URL,
+        elasticsearch_api_key=ELASTICSEARCH_API_KEY,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
     )
 
     if clear_existing:
-        print("\nClearing existing data...")
+        log.info("Clearing existing data...")
         kg_builder.clear_all()
 
     pdf_processor = PDFProcessor(pdf_path)
     total_pages = pdf_processor.get_total_pages()
-    print(f"\nPDF has {total_pages} pages")
+    log.info(f"PDF has {total_pages} pages")
 
     page_batches = pdf_processor.get_page_batches(pages_per_batch=pages_per_batch)
-    print(
+    log.info(
         f"Processing PDF in {len(page_batches)} batches ({pages_per_batch} pages per batch)"
     )
 
     text_batches = []
     for i, (start_page, end_page) in enumerate(page_batches):
-        print(
-            f"  Batch {i + 1}/{len(page_batches)}: Processing pages {start_page}-{end_page - 1}..."
+        log.debug(
+            f"Batch {i + 1}/{len(page_batches)}: Processing pages {start_page}-{end_page - 1}..."
         )
         batch_text = pdf_processor.process_batch(start_page, end_page)
         if batch_text.strip():
             text_batches.append(batch_text)
 
-    print(f"Extracted {len(text_batches)} text batches")
+    log.info(f"Extracted {len(text_batches)} text batches")
 
-    print("\n" + "=" * 60)
-    print("Building Knowledge Graph (Async Batch Processing)")
-    print("=" * 60)
+    log.info("=" * 60)
+    log.info("Building Knowledge Graph (Async Batch Processing)")
+    log.info("=" * 60)
 
     result = await kg_builder.async_build_from_text_batches(
         text_batches,
         max_concurrent_batches=max_concurrent_batches,
     )
-    print("\nBuild complete!")
-    print(f"Batches processed: {result.get('batches_processed', len(text_batches))}")
-    print(f"Chunks: {result['chunks_created']}")
-    print(f"Entities: {result['entities_extracted']}")
-    print(f"Relationships: {result['relationships_extracted']}")
+    log.info("Build complete!")
+    log.info(f"Batches processed: {result.get('batches_processed', len(text_batches))}")
+    log.info(f"Chunks: {result['chunks_created']}")
+    log.info(f"Entities: {result['entities_extracted']}")
+    log.info(f"Relationships: {result['relationships_extracted']}")
 
 
 async def search_query(
     query: str,
     top_k_chunks: int = 5,
     max_depth: int = 2,
+    use_hybrid_search: bool = True,
+    vector_weight: float = 0.7,
+    keyword_weight: float = 0.3,
 ):
-    print("=" * 60)
-    print("Initializing Knowledge Graph Builder")
-    print("=" * 60)
+    log.info("=" * 60)
+    log.info("Initializing Knowledge Graph Builder")
+    log.info("=" * 60)
 
     kg_builder = KnowledgeGraphBuilder(
         openai_api_key=OPENAI_API_KEY,
@@ -91,40 +99,52 @@ async def search_query(
         neo4j_password=NEO4J_PASSWORD,
         qdrant_url=QDRANT_URL,
         qdrant_api_key=QDRANT_API_KEY,
+        elasticsearch_url=ELASTICSEARCH_URL,
+        elasticsearch_api_key=ELASTICSEARCH_API_KEY,
     )
 
-    print("\n" + "=" * 60)
-    print("Initializing GraphRAG")
-    print("=" * 60)
+    log.info("=" * 60)
+    log.info("Initializing GraphRAG")
+    log.info("=" * 60)
 
     graphrag = GraphRAG(
         openai_api_key=OPENAI_API_KEY,
         vector_store=kg_builder.vector_store,
         graph_store=kg_builder.graph_store,
+        elasticsearch_store=kg_builder.elasticsearch_store,
         top_k_chunks=top_k_chunks,
         max_depth=max_depth,
+        use_hybrid_search=use_hybrid_search,
+        vector_weight=vector_weight,
+        keyword_weight=keyword_weight,
     )
 
-    print("\n" + "=" * 60)
-    print("Searching with GraphRAG")
-    print("=" * 60)
+    search_type = (
+        "Hybrid (Vector + Keyword + Graph)" if use_hybrid_search else "Vector + Graph"
+    )
+    log.info(f"Search mode: {search_type}")
 
-    print(f"\nQuery: {query}\n")
+    log.info("=" * 60)
+    log.info("Searching with GraphRAG")
+    log.info("=" * 60)
+
+    log.info(f"Query: {query}")
 
     result = graphrag.search(query)
 
-    print("Answer:")
-    print("-" * 60)
-    print(result["answer"])
-    print("-" * 60)
-    print(f"\nChunks used: {result['chunks_used']}")
-    print(f"Entities found: {result['entities_found']}")
+    log.info("Answer:")
+    log.info("-" * 60)
+    log.info(result["answer"])
+    log.info("-" * 60)
+    log.info(f"Chunks used: {result['chunks_used']}")
+    log.info(f"Entities found: {result['entities_found']}")
+    log.info(f"Search type: {result.get('search_type', 'unknown')}")
 
 
 async def delete_all():
-    print("=" * 60)
-    print("Deleting All Data")
-    print("=" * 60)
+    log.info("=" * 60)
+    log.info("Deleting All Data")
+    log.info("=" * 60)
 
     kg_builder = KnowledgeGraphBuilder(
         openai_api_key=OPENAI_API_KEY,
@@ -133,11 +153,13 @@ async def delete_all():
         neo4j_password=NEO4J_PASSWORD,
         qdrant_url=QDRANT_URL,
         qdrant_api_key=QDRANT_API_KEY,
+        elasticsearch_url=ELASTICSEARCH_URL,
+        elasticsearch_api_key=ELASTICSEARCH_API_KEY,
     )
 
-    print("\nClearing all data from Qdrant and Neo4j...")
+    log.info("Clearing all data from Qdrant, Elasticsearch, and Neo4j...")
     kg_builder.clear_all()
-    print("\n✅ All data deleted successfully!")
+    log.info("All data deleted successfully!")
 
 
 def main():
@@ -200,9 +222,26 @@ def main():
         default=2,
         help="Maximum graph traversal depth (default: 2)",
     )
+    search_parser.add_argument(
+        "--no-hybrid",
+        action="store_true",
+        help="Disable hybrid search (use vector search only)",
+    )
+    search_parser.add_argument(
+        "--vector-weight",
+        type=float,
+        default=0.7,
+        help="Weight for vector search in hybrid mode (default: 0.7)",
+    )
+    search_parser.add_argument(
+        "--keyword-weight",
+        type=float,
+        default=0.3,
+        help="Weight for keyword search in hybrid mode (default: 0.3)",
+    )
 
     delete_parser = subparsers.add_parser(
-        "delete", help="Delete all data from Qdrant and Neo4j"
+        "delete", help="Delete all data from Qdrant, Elasticsearch, and Neo4j"
     )
     delete_parser.add_argument(
         "--confirm",
@@ -229,13 +268,18 @@ def main():
                 query=args.query,
                 top_k_chunks=args.top_k,
                 max_depth=args.max_depth,
+                use_hybrid_search=not args.no_hybrid,
+                vector_weight=args.vector_weight,
+                keyword_weight=args.keyword_weight,
             )
         )
     elif args.command == "delete":
         if not args.confirm:
-            print("⚠️  WARNING: This will delete ALL data from Qdrant and Neo4j!")
-            print("Use --confirm flag to proceed with deletion.")
-            print("\nExample: python src/main.py delete --confirm")
+            log.warning(
+                "WARNING: This will delete ALL data from Qdrant, Elasticsearch, and Neo4j!"
+            )
+            log.warning("Use --confirm flag to proceed with deletion.")
+            log.warning("Example: python src/main.py delete --confirm")
             return
         asyncio.run(delete_all())
     else:

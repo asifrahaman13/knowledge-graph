@@ -10,3 +10,6 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "your-password")
 
 QDRANT_URL = os.getenv("QDRANT_URL", None)
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
+
+ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", None)
+ELASTICSEARCH_API_KEY = os.getenv("ELASTICSEARCH_API_KEY", None)
