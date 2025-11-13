@@ -1,0 +1,80 @@
+{
+  // Hide files and folders in the file explorer
+  "files.exclude": {
+    // Python cache and compiled files
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/*.pyo": true,
+    "**/*.pyd": true,
+    "**/*.so": true,
+    
+    // Python build artifacts
+    "**/build": true,
+    "**/dist": true,
+    "**/*.egg-info": true,
+    "**/wheels": true,
+    
+    // Virtual environments
+    "**/.venv": false,
+    "**/venv": true,
+    "**/env": true,
+    "**/.env": true,
+    
+    // Database and storage
+    "**/qdrant_db": true,
+    "**/*.db": true,
+    "**/*.sqlite": true,
+    "**/*.sqlite3": true,
+    
+    // IDE and editor files
+    "**/.idea": true,
+    "**/.vscode": false,  // Keep .vscode visible
+    "**/.cursor": false,  // Keep .cursor visible
+    
+    // OS files
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/.git": true,  // Keep .git visible (useful for git operations)
+    
+    // Python type checking and testing caches
+    "**/.mypy_cache": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/.coverage": true,
+    "**/htmlcov": true,
+    "**/.tox": true,
+    
+    // Lock files (optional - set to false if you want to see them)
+    "**/uv.lock": false,
+    "**/poetry.lock": false,
+    "**/package-lock.json": false,
+    "**/yarn.lock": false
+  },
+  
+  // Search exclusions (files to exclude from search)
+  "search.exclude": {
+    "**/__pycache__": true,
+    "**/.venv": false,
+    "**/venv": false,
+    "**/qdrant_db": true,
+    "**/.mypy_cache": true,
+    "**/.pytest_cache": true,
+    "**/node_modules": true,
+    "**/build": true,
+    "**/dist": true
+  },
+  
+  // File watcher exclusions (files to ignore for file watching)
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.venv/**": true,
+    "**/venv/**": true,
+    "**/qdrant_db/**": true,
+    "**/__pycache__/**": true,
+    "**/.mypy_cache/**": true,
+    "**/.pytest_cache/**": true
+  }
+}
+

@@ -1,7 +1,7 @@
 [project]
 name = "knowledge-graph"
 version = "0.1.0"
-description = "Knowledge Graph"
+description = "Knowledge Graph legal documents"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
