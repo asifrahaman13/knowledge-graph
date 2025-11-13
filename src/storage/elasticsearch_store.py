@@ -3,13 +3,16 @@ from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 import uuid
 import warnings
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from ..core.logger import log
+from ..config.models import IndexNames
 
 
 class ElasticsearchStore:
     def __init__(
         self,
-        index_name: str = "legal-docs",
+        index_name: str = IndexNames.LEGAL_DOCS.value,
         url: Optional[str] = None,
         api_key: Optional[str] = None,
     ):
@@ -126,6 +129,54 @@ class ElasticsearchStore:
             if actions:
                 bulk(self.client, actions)
                 self.client.indices.refresh(index=self.index_name)
+                log.info(
+                    f"Uploaded {len(actions)} chunks to Elasticsearch index '{self.index_name}'"
+                )
+        except Exception as e:
+            error_msg = str(e)
+            log.error(f"Failed to add chunks to Elasticsearch: {error_msg}")
+            warnings.warn(
+                f"Failed to add chunks to Elasticsearch: {error_msg}", UserWarning
+            )
+
+    async def async_add_chunks(self, chunks: List[Dict[str, Any]]):
+        """Async version of add_chunks using thread pool."""
+        if not self._check_connection() or not self.client:
+            log.warning(
+                f"Skipping Elasticsearch upload: Not connected (chunks: {len(chunks)})"
+            )
+            return
+
+        try:
+            actions = []
+            for chunk in chunks:
+                doc = {
+                    "_index": self.index_name,
+                    "_id": chunk.get("chunk_id", str(uuid.uuid4())),
+                    "_source": {
+                        "chunk_id": chunk.get("chunk_id", str(uuid.uuid4())),
+                        "text": chunk.get("text", ""),
+                        "chunk_index": chunk.get("chunk_index", 0),
+                        "start_char": chunk.get("start_char", 0),
+                        "end_char": chunk.get("end_char", 0),
+                        "document_id": chunk.get("document_id", "default"),
+                    },
+                }
+                actions.append(doc)
+
+            if actions:
+                loop = asyncio.get_event_loop()
+                with ThreadPoolExecutor() as executor:
+                    await loop.run_in_executor(
+                        executor,
+                        lambda: bulk(self.client, actions) if self.client else None,
+                    )
+                    if self.client:
+                        client_ref = self.client
+                        await loop.run_in_executor(
+                            executor,
+                            lambda: client_ref.indices.refresh(index=self.index_name),  # type: ignore
+                        )
                 log.info(
                     f"Uploaded {len(actions)} chunks to Elasticsearch index '{self.index_name}'"
                 )

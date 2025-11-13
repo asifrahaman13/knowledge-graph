@@ -54,14 +54,30 @@ async def upload_pdf(
         f"Processing PDF in {len(page_batches)} batches ({pages_per_batch} pages per batch)"
     )
 
-    text_batches = []
-    for i, (start_page, end_page) in enumerate(page_batches):
-        log.debug(
-            f"Batch {i + 1}/{len(page_batches)}: Processing pages {start_page}-{end_page - 1}..."
-        )
-        batch_text = pdf_processor.process_batch(start_page, end_page)
-        if batch_text.strip():
-            text_batches.append(batch_text)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from multiprocessing import cpu_count
+    from typing import List, Optional
+
+    max_workers = min(cpu_count(), 4)
+
+    batch_results: List[Optional[str]] = [None] * len(page_batches)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_batch = {
+            executor.submit(pdf_processor.process_batch, start, end): (i, start, end)
+            for i, (start, end) in enumerate(page_batches)
+        }
+
+        for future in as_completed(future_to_batch):
+            i, start, end = future_to_batch[future]
+            try:
+                batch_text = future.result()
+                if batch_text and batch_text.strip():
+                    batch_results[i] = batch_text
+            except Exception as e:
+                log.warning(f"Failed to process batch {i} (pages {start}-{end}): {e}")
+
+    text_batches: List[str] = [batch for batch in batch_results if batch is not None]
 
     log.info(f"Extracted {len(text_batches)} text batches")
 
