@@ -18,7 +18,7 @@
     "**/.venv": false,
     "**/venv": true,
     "**/env": true,
-    "**/.env": true,
+    "**/.env": false,
     
     // Database and storage
     "**/qdrant_db": true,

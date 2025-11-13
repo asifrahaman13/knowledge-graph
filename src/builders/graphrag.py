@@ -1,8 +1,11 @@
 from typing import List, Dict, Any, Optional
+import hashlib
+import json
 from ..core.embeddings import EmbeddingGenerator
 from ..storage.qdrant_store import QdrantVectorStore
 from ..storage.neo4j_store import Neo4jGraphStore
 from ..storage.elasticsearch_store import ElasticsearchStore
+from ..storage.redis_cache import RedisCache
 from openai import OpenAI
 from ..config.models import LLMModels
 
@@ -20,8 +23,10 @@ class GraphRAG:
         use_hybrid_search: bool = True,
         vector_weight: float = 0.7,
         keyword_weight: float = 0.3,
+        redis_cache: Optional[RedisCache] = None,
+        cache_ttl: int = 3600,  # 1 hour for search results
     ):
-        self.embedder = EmbeddingGenerator(openai_api_key)
+        self.embedder = EmbeddingGenerator(openai_api_key, redis_cache=redis_cache)
         self.vector_store = vector_store
         self.graph_store = graph_store
         self.elasticsearch_store = elasticsearch_store
@@ -32,8 +37,31 @@ class GraphRAG:
         self.use_hybrid_search = use_hybrid_search and elasticsearch_store is not None
         self.vector_weight = vector_weight
         self.keyword_weight = keyword_weight
+        self.cache = redis_cache
+        self.cache_ttl = cache_ttl
+
+    def _get_cache_key(self, query: str) -> str:
+        """Generate cache key for search query."""
+        cache_params = {
+            "query": query,
+            "top_k": self.top_k_chunks,
+            "max_depth": self.max_depth,
+            "use_hybrid": self.use_hybrid_search,
+            "vector_weight": self.vector_weight,
+            "keyword_weight": self.keyword_weight,
+        }
+        cache_string = json.dumps(cache_params, sort_keys=True)
+        cache_hash = hashlib.sha256(cache_string.encode()).hexdigest()
+        return f"search:{cache_hash}"
 
     def search(self, query: str) -> Dict[str, Any]:
+        # Check cache first
+        if self.cache:
+            cache_key = self._get_cache_key(query)
+            cached = self.cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         if self.use_hybrid_search:
             similar_chunks = self._hybrid_search(query)
         else:
@@ -51,13 +79,20 @@ class GraphRAG:
 
         answer = self._generate_answer(query, context)
 
-        return {
+        result = {
             "answer": answer,
             "chunks_used": len(similar_chunks),
             "entities_found": len(entities),
             "context": context,
             "search_type": "hybrid" if self.use_hybrid_search else "vector",
         }
+
+        # Cache the result
+        if self.cache:
+            cache_key = self._get_cache_key(query)
+            self.cache.set(cache_key, result, ttl=self.cache_ttl, serialize=True)
+
+        return result
 
     def _hybrid_search(self, query: str) -> List[Dict[str, Any]]:
         query_embedding = self.embedder.embed_text(query)
@@ -135,7 +170,7 @@ class GraphRAG:
         context_parts = []
 
         context_parts.append("=== Relevant Text Chunks ===")
-        for i, chunk in enumerate(chunks, 1):
+        for i, chunk in enumerate[Dict[str, Any]](chunks, 1):
             context_parts.append(f"\nChunk {i} (score: {chunk['score']:.3f}):")
             context_parts.append(chunk["text"])
 

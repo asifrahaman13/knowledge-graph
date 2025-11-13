@@ -4,12 +4,14 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 import uuid
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from ..config.models import IndexNames
+from ..core.logger import log
 
 
 class QdrantVectorStore:
     def __init__(
         self,
-        collection_name: str = "text_chunks",
+        collection_name: str = IndexNames.LEGAL_DOCS.value,
         url: Optional[str] = None,
         api_key: Optional[str] = None,
         dimension: int = 3072,
@@ -20,10 +22,7 @@ class QdrantVectorStore:
         if url:
             self.client = QdrantClient(url=url, api_key=api_key)
         else:
-            try:
-                self.client = QdrantClient(path="./qdrant_db")
-            except Exception:
-                self.client = QdrantClient(location=":memory:")
+            log.info("Connecting to Qdrant at: ./qdrant_db")
 
         self._ensure_collection()
 
@@ -47,7 +46,9 @@ class QdrantVectorStore:
             raise ValueError("Number of chunks must match number of embeddings")
 
         points = []
-        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+        for i, (chunk, embedding) in enumerate[tuple[Dict[str, Any], List[float]]](
+            zip[tuple[Dict[str, Any], List[float]]](chunks, embeddings)
+        ):
             point_id = str(uuid.uuid4())
             original_chunk_id = chunk.get("chunk_id", point_id)
 
