@@ -12,7 +12,7 @@ class EmbeddingGenerator:
         api_key: str,
         model: str = EmbeddingModels.TEXT_EMBEDDING_3_LARGE.value,
         redis_cache: Optional[RedisCache] = None,
-        cache_ttl: int = 86400 * 7,  # 7 days for embeddings
+        cache_ttl: int = 86400 * 3,
     ):
         self.client = OpenAI(api_key=api_key)
         self.async_client = AsyncOpenAI(api_key=api_key)
@@ -22,12 +22,10 @@ class EmbeddingGenerator:
         self.cache_ttl = cache_ttl
 
     def _get_cache_key(self, text: str) -> str:
-        """Generate cache key for embedding."""
         text_hash = hashlib.sha256(f"{self.model}:{text}".encode()).hexdigest()
         return f"embedding:{self.model}:{text_hash}"
 
     def embed_text(self, text: str) -> List[float]:
-        # Check cache first
         if self.cache:
             cache_key = self._get_cache_key(text)
             cached = self.cache.get(cache_key)
@@ -38,7 +36,6 @@ class EmbeddingGenerator:
             response = self.client.embeddings.create(model=self.model, input=text)
             embedding = response.data[0].embedding
 
-            # Cache the result
             if self.cache:
                 cache_key = self._get_cache_key(text)
                 self.cache.set(cache_key, embedding, ttl=self.cache_ttl, serialize=True)
@@ -52,7 +49,6 @@ class EmbeddingGenerator:
         uncached_indices = []
         uncached_texts = []
 
-        # Check cache for each text
         if self.cache:
             for i, text in enumerate(texts):
                 cache_key = self._get_cache_key(text)
@@ -66,7 +62,6 @@ class EmbeddingGenerator:
             uncached_indices = list(range(len(texts)))
             uncached_texts = texts
 
-        # Generate embeddings for uncached texts
         if uncached_texts:
             for i in range(0, len(uncached_texts), batch_size):
                 batch = uncached_texts[i : i + batch_size]
@@ -77,7 +72,6 @@ class EmbeddingGenerator:
                     )
                     batch_embeddings = [item.embedding for item in response.data]
 
-                    # Store in embeddings list and cache
                     for j, (embedding, orig_idx) in enumerate[tuple[List[float], int]](
                         zip(batch_embeddings, batch_indices)
                     ):
@@ -90,8 +84,6 @@ class EmbeddingGenerator:
                 except Exception as e:
                     raise Exception(f"Error generating batch embeddings: {e}")
 
-        # Return embeddings in original order (all should be filled by now)
-        # Filter out any None values (shouldn't happen, but type checker needs this)
         result = [emb for emb in embeddings if emb is not None]
         return cast(List[List[float]], result)
 
@@ -102,7 +94,6 @@ class EmbeddingGenerator:
         uncached_indices = []
         uncached_texts = []
 
-        # Check cache for each text
         if self.cache:
             for i, text in enumerate(texts):
                 cache_key = self._get_cache_key(text)
@@ -116,7 +107,6 @@ class EmbeddingGenerator:
             uncached_indices = list(range(len(texts)))
             uncached_texts = texts
 
-        # Generate embeddings for uncached texts
         if uncached_texts:
             semaphore = asyncio.Semaphore(max_concurrent_batches)
 
@@ -130,9 +120,8 @@ class EmbeddingGenerator:
                         )
                         batch_embeddings = [item.embedding for item in response.data]
 
-                        # Cache the results
                         if self.cache:
-                            for j, (embedding, text) in enumerate(
+                            for _, (embedding, text) in enumerate(
                                 zip(batch_embeddings, batch)
                             ):
                                 cache_key = self._get_cache_key(text)
@@ -162,13 +151,10 @@ class EmbeddingGenerator:
             ]
             batch_results = await asyncio.gather(*tasks)
 
-            # Store results in embeddings list at correct indices
             for orig_indices, batch_embeddings in batch_results:
                 for orig_idx, embedding in zip(orig_indices, batch_embeddings):
                     embeddings[orig_idx] = embedding
 
-        # Return embeddings in original order (all should be filled by now)
-        # Filter out any None values (shouldn't happen, but type checker needs this)
         result = [emb for emb in embeddings if emb is not None]
         return cast(List[List[float]], result)
 
