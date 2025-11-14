@@ -118,7 +118,7 @@ class EntityRelationshipExtractor:
         api_key: str,
         model: str = LLMModels.GPT_4_POINT_1.value,
         redis_cache: Optional[RedisCache] = None,
-        cache_ttl: int = 86400 * 7,  # 7 days for extractions
+        cache_ttl: int = 86400 * 3,
     ):
         self.client = OpenAI(api_key=api_key)
         self.async_client = AsyncOpenAI(api_key=api_key)
@@ -127,12 +127,10 @@ class EntityRelationshipExtractor:
         self.cache_ttl = cache_ttl
 
     def _get_cache_key(self, text: str) -> str:
-        """Generate cache key for extraction."""
         text_hash = hashlib.sha256(f"{self.model}:{text}".encode()).hexdigest()
         return f"extraction:{self.model}:{text_hash}"
 
     def extract(self, text: str) -> Dict[str, Any]:
-        # Check cache first
         if self.cache:
             cache_key = self._get_cache_key(text)
             cached = self.cache.get(cache_key)
@@ -159,7 +157,6 @@ class EntityRelationshipExtractor:
             result = json.loads(content)
             validated_result = self._validate_result(result)
 
-            # Cache the result
             if self.cache:
                 cache_key = self._get_cache_key(text)
                 self.cache.set(
@@ -172,7 +169,6 @@ class EntityRelationshipExtractor:
             raise Exception(f"Error extracting entities: {e}")
 
     async def async_extract(self, text: str) -> Dict[str, Any]:
-        # Check cache first
         if self.cache:
             cache_key = self._get_cache_key(text)
             cached = await self.cache.async_get(cache_key)
@@ -199,7 +195,6 @@ class EntityRelationshipExtractor:
             result = json.loads(content)
             validated_result = self._validate_result(result)
 
-            # Cache the result
             if self.cache:
                 cache_key = self._get_cache_key(text)
                 await self.cache.async_set(
