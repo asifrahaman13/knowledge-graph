@@ -1,4 +1,5 @@
 import argparse
+from enum import Enum
 from ..builders.kg_builder import KnowledgeGraphBuilder
 from ..builders.graphrag import GraphRAG
 from ..processors.pdf_processor import PDFProcessor
@@ -19,6 +20,12 @@ from ..config.config import (
     REDIS_DEFAULT_TTL,
 )
 from ..storage.redis_cache import RedisCache
+
+
+class Commands(Enum):
+    UPLOAD = "upload"
+    SEARCH = "search"
+    DELETE = "delete"
 
 
 async def upload_pdf(
@@ -305,7 +312,7 @@ async def main():
 
     args = parser.parse_args()
 
-    if args.command == "upload":
+    if args.command == Commands.UPLOAD.value:
         await upload_pdf(
             pdf_path=args.pdf_path,
             chunk_size=args.chunk_size,
@@ -314,7 +321,7 @@ async def main():
             max_concurrent_batches=args.max_concurrent_batches,
             clear_existing=args.clear,
         )
-    elif args.command == "search":
+    elif args.command == Commands.SEARCH.value:
         await search_query(
             query=args.query,
             top_k_chunks=args.top_k,
@@ -323,7 +330,7 @@ async def main():
             vector_weight=args.vector_weight,
             keyword_weight=args.keyword_weight,
         )
-    elif args.command == "delete":
+    elif args.command == Commands.DELETE.value:
         if not args.confirm:
             log.warning(
                 "WARNING: This will delete ALL data from Qdrant, Elasticsearch, and Neo4j!"
