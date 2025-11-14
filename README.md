@@ -2,6 +2,9 @@
 
 A complete custom implementation of a knowledge graph builder using Qdrant for vector storage and Neo4j for graph storage. Process PDFs, extract entities and relationships, and perform intelligent search using GraphRAG.
 
+<img width="1570" height="622" alt="Screenshot from 2025-11-13 23-33-05" src="https://github.com/user-attachments/assets/6bbba9b4-45ef-4503-a54d-09cbc52aa486" />
+
+
 ## Features
 
 - ✅ **Custom Implementation**: Built from scratch, no dependencies on neo4j_graphrag
