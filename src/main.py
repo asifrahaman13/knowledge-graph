@@ -1,5 +1,6 @@
 import sys
 import os
+import asyncio
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
@@ -8,4 +9,4 @@ if project_root not in sys.path:
 if __name__ == "__main__":
     from src.cli.main import main
 
-    main()
+    asyncio.run(main())

@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Optional
 import hashlib
 import json
 from ..core.embeddings import EmbeddingGenerator
+from ..core.logger import log
 from ..storage.qdrant_store import QdrantVectorStore
 from ..storage.neo4j_store import Neo4jGraphStore
 from ..storage.elasticsearch_store import ElasticsearchStore
@@ -54,7 +55,7 @@ class GraphRAG:
         cache_hash = hashlib.sha256(cache_string.encode()).hexdigest()
         return f"search:{cache_hash}"
 
-    def search(self, query: str) -> Dict[str, Any]:
+    async def search(self, query: str) -> Dict[str, Any]:
         # Check cache first
         if self.cache:
             cache_key = self._get_cache_key(query)
@@ -71,9 +72,11 @@ class GraphRAG:
             )
 
         chunk_ids = [chunk["chunk_id"] for chunk in similar_chunks]
-        entities = self.graph_store.get_entities_from_chunks(
+        log.debug(f"Searching for entities in chunks: {chunk_ids}")
+        entities = await self.graph_store.get_entities_from_chunks(
             chunk_ids, max_depth=self.max_depth
         )
+        log.debug(f"Found {len(entities)} entities from {len(chunk_ids)} chunks")
 
         context = self._build_context(similar_chunks, entities)
 

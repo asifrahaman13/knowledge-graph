@@ -41,37 +41,9 @@ class QdrantVectorStore:
         except Exception:
             pass
 
-    def add_chunks(self, chunks: List[Dict[str, Any]], embeddings: List[List[float]]):
-        if len(chunks) != len(embeddings):
-            raise ValueError("Number of chunks must match number of embeddings")
-
-        points = []
-        for i, (chunk, embedding) in enumerate[tuple[Dict[str, Any], List[float]]](
-            zip[tuple[Dict[str, Any], List[float]]](chunks, embeddings)
-        ):
-            point_id = str(uuid.uuid4())
-            original_chunk_id = chunk.get("chunk_id", point_id)
-
-            point = PointStruct(
-                id=point_id,
-                vector=embedding,
-                payload={
-                    "chunk_id": original_chunk_id,
-                    "text": chunk["text"],
-                    "chunk_index": chunk.get("chunk_index", i),
-                    "start_char": chunk.get("start_char", 0),
-                    "end_char": chunk.get("end_char", 0),
-                    "document_id": chunk.get("document_id", "default"),
-                },
-            )
-            points.append(point)
-
-        self.client.upsert(collection_name=self.collection_name, points=points)
-
     async def async_add_chunks(
         self, chunks: List[Dict[str, Any]], embeddings: List[List[float]]
     ):
-        """Async version of add_chunks using thread pool."""
         if len(chunks) != len(embeddings):
             raise ValueError("Number of chunks must match number of embeddings")
 

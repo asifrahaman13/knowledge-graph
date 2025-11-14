@@ -20,24 +20,17 @@ class ElasticsearchStore:
         self._connected = False
 
         try:
-            if url:
+            if url and api_key:
                 log.info(f"Connecting to Elasticsearch at: {url}")
-                if api_key:
-                    log.debug("Using API key authentication")
-                    self.client = Elasticsearch(
-                        url,
-                        api_key=api_key,
-                    )
-                else:
-                    log.warning(
-                        "No API key provided, connecting without authentication"
-                    )
-                    self.client = Elasticsearch(url)
-            else:
-                log.info("Connecting to Elasticsearch at: http://localhost:9200")
+                log.debug("Using API key authentication")
                 self.client = Elasticsearch(
-                    hosts=["http://localhost:9200"],
+                    url,
+                    api_key=api_key,
                 )
+            else:
+                log.warning("No Elasticsearch connection details provided")
+                self.client = None
+                raise ValueError("No Elasticsearch connection details provided")
 
             ping_result = self.client.ping()
             if ping_result:
@@ -49,10 +42,6 @@ class ElasticsearchStore:
             else:
                 log.warning(
                     "Elasticsearch connection failed: ping() returned False. Keyword search will be disabled."
-                )
-                warnings.warn(
-                    "Elasticsearch connection failed: ping() returned False. Keyword search will be disabled.",
-                    UserWarning,
                 )
                 self._connected = False
         except Exception as e:
@@ -102,45 +91,7 @@ class ElasticsearchStore:
         except Exception as e:
             warnings.warn(f"Failed to create Elasticsearch index: {e}", UserWarning)
 
-    def add_chunks(self, chunks: List[Dict[str, Any]]):
-        if not self._check_connection() or not self.client:
-            log.warning(
-                f"Skipping Elasticsearch upload: Not connected (chunks: {len(chunks)})"
-            )
-            return
-
-        try:
-            actions = []
-            for chunk in chunks:
-                doc = {
-                    "_index": self.index_name,
-                    "_id": chunk.get("chunk_id", str(uuid.uuid4())),
-                    "_source": {
-                        "chunk_id": chunk.get("chunk_id", str(uuid.uuid4())),
-                        "text": chunk.get("text", ""),
-                        "chunk_index": chunk.get("chunk_index", 0),
-                        "start_char": chunk.get("start_char", 0),
-                        "end_char": chunk.get("end_char", 0),
-                        "document_id": chunk.get("document_id", "default"),
-                    },
-                }
-                actions.append(doc)
-
-            if actions:
-                bulk(self.client, actions)
-                self.client.indices.refresh(index=self.index_name)
-                log.info(
-                    f"Uploaded {len(actions)} chunks to Elasticsearch index '{self.index_name}'"
-                )
-        except Exception as e:
-            error_msg = str(e)
-            log.error(f"Failed to add chunks to Elasticsearch: {error_msg}")
-            warnings.warn(
-                f"Failed to add chunks to Elasticsearch: {error_msg}", UserWarning
-            )
-
     async def async_add_chunks(self, chunks: List[Dict[str, Any]]):
-        """Async version of add_chunks using thread pool."""
         if not self._check_connection() or not self.client:
             log.warning(
                 f"Skipping Elasticsearch upload: Not connected (chunks: {len(chunks)})"
@@ -183,9 +134,6 @@ class ElasticsearchStore:
         except Exception as e:
             error_msg = str(e)
             log.error(f"Failed to add chunks to Elasticsearch: {error_msg}")
-            warnings.warn(
-                f"Failed to add chunks to Elasticsearch: {error_msg}", UserWarning
-            )
 
     def search(
         self, query: str, top_k: int = 5, boost: float = 1.0
@@ -226,7 +174,7 @@ class ElasticsearchStore:
 
             return chunks
         except Exception as e:
-            warnings.warn(f"Elasticsearch search failed: {e}", UserWarning)
+            log.error(f"Elasticsearch search failed: {e}")
             return []
 
     def delete_index(self):
@@ -237,4 +185,4 @@ class ElasticsearchStore:
             if self.client.indices.exists(index=self.index_name):
                 self.client.indices.delete(index=self.index_name)
         except Exception as e:
-            warnings.warn(f"Failed to delete Elasticsearch index: {e}", UserWarning)
+            log.error(f"Failed to delete Elasticsearch index: {e}")

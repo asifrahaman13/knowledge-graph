@@ -53,64 +53,8 @@ class KnowledgeGraphBuilder:
             api_key=elasticsearch_api_key,
         )
 
-    def build_from_text(
-        self, text: str, document_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        if not document_id:
-            document_id = str(uuid.uuid4())
-
-        log.info("Step 1: Chunking text...")
-        chunks = self.chunker.chunk_text(text)
-        log.info(f"Created {len(chunks)} chunks")
-
-        log.info("Step 2: Generating embeddings...")
-        chunk_texts = [chunk["text"] for chunk in chunks]
-        embeddings = self.embedder.embed_batch(chunk_texts)
-        log.info(f"Generated {len(embeddings)} embeddings")
-
-        log.info("Step 3: Extracting entities and relationships...")
-        all_entities = []
-        all_relationships = []
-
-        for i, chunk in enumerate[dict[Any, Any]](chunks):
-            chunk_id = f"{document_id}_chunk_{i}"
-            chunk["chunk_id"] = chunk_id
-            chunk["document_id"] = document_id
-
-            extraction = self.extractor.extract(chunk["text"])
-            entities = extraction.get("nodes", [])
-            relationships = extraction.get("relationships", [])
-
-            all_entities.extend(entities)
-            all_relationships.extend(relationships)
-
-            self.graph_store.add_chunk(chunk, chunk_id)
-
-            self.graph_store.add_entities(entities, chunk_id)
-
-        log.info(
-            f"Extracted {len(all_entities)} entities and {len(all_relationships)} relationships"
-        )
-
-        log.info("Step 4: Storing chunks in Qdrant...")
-        self.vector_store.add_chunks(chunks, embeddings)
-        log.info("Chunks stored in Qdrant")
-
-        log.info("Step 5: Storing chunks in Elasticsearch...")
-        self.elasticsearch_store.add_chunks(chunks)
-        log.info("Chunks stored in Elasticsearch")
-
-        log.info("Step 6: Storing relationships in Neo4j...")
-        self.graph_store.add_relationships(all_relationships)
-        log.info("Relationships stored in Neo4j")
-
-        return {
-            "document_id": document_id,
-            "chunks_created": len(chunks),
-            "entities_extracted": len(all_entities),
-            "relationships_extracted": len(all_relationships),
-            "embeddings_generated": len(embeddings),
-        }
+    async def initialize(self):
+        await self.graph_store._initialize()
 
     async def async_build_from_text_batch(
         self, text: str, document_id: Optional[str] = None, batch_offset: int = 0
@@ -164,15 +108,15 @@ class KnowledgeGraphBuilder:
 
         await asyncio.gather(qdrant_task, elasticsearch_task)
 
-        self.graph_store.add_chunks_batch(chunks, chunk_ids)
+        await self.graph_store.async_add_chunks_batch(chunks, chunk_ids)
 
         for i, (chunk, chunk_id) in enumerate(zip(chunks, chunk_ids)):
             extraction = extractions[i]
             entities = extraction.get("nodes", [])
             if entities:
-                self.graph_store.add_entities(entities, chunk_id)
+                await self.graph_store.async_add_entities(entities, chunk_id)
 
-        self.graph_store.add_relationships(all_relationships)
+        await self.graph_store.async_add_relationships(all_relationships)
 
         return {
             "document_id": document_id,
@@ -228,23 +172,16 @@ class KnowledgeGraphBuilder:
             "batches_processed": len(text_batches),
         }
 
-    def clear_all(self):
+    async def clear_all(self):
         log.info("Clearing all data...")
-        from concurrent.futures import ThreadPoolExecutor
-        from multiprocessing import cpu_count
-
-        max_workers = cpu_count()
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [
-                executor.submit(self.vector_store.delete_collection),
-                executor.submit(self.elasticsearch_store.delete_index),
-                executor.submit(self.graph_store.clear_all),
-            ]
-            for future in futures:
-                try:
-                    future.result()
-                except Exception as e:
-                    log.warning(f"Error during cleanup: {e}")
+        try:
+            await asyncio.gather(
+                asyncio.to_thread(self.vector_store.delete_collection),
+                asyncio.to_thread(self.elasticsearch_store.delete_index),
+                self.graph_store.clear_all(),
+                return_exceptions=True,
+            )
+        except Exception as e:
+            log.warning(f"Error during cleanup: {e}")
 
         log.info("All data cleared")

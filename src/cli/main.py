@@ -1,4 +1,3 @@
-import asyncio
 import argparse
 from ..builders.kg_builder import KnowledgeGraphBuilder
 from ..builders.graphrag import GraphRAG
@@ -60,9 +59,11 @@ async def upload_pdf(
         redis_cache=redis_cache,
     )
 
+    await kg_builder.initialize()
+
     if clear_existing:
         log.info("Clearing existing data...")
-        kg_builder.clear_all()
+        await kg_builder.clear_all()
 
     pdf_processor = PDFProcessor(pdf_path)
     total_pages = pdf_processor.get_total_pages()
@@ -151,6 +152,8 @@ async def search_query(
         redis_cache=redis_cache,
     )
 
+    await kg_builder.initialize()
+
     log.info("=" * 60)
     log.info("Initializing GraphRAG")
     log.info("=" * 60)
@@ -179,7 +182,7 @@ async def search_query(
 
     log.info(f"Query: {query}")
 
-    result = graphrag.search(query)
+    result = await graphrag.search(query)
 
     log.info("Answer:")
     log.info("-" * 60)
@@ -206,12 +209,14 @@ async def delete_all():
         elasticsearch_api_key=ELASTICSEARCH_API_KEY,
     )
 
+    await kg_builder.initialize()
+
     log.info("Clearing all data from Qdrant, Elasticsearch, and Neo4j...")
-    kg_builder.clear_all()
+    await kg_builder.clear_all()
     log.info("All data deleted successfully!")
 
 
-def main():
+async def main():
     parser = argparse.ArgumentParser(
         description="Knowledge Graph Builder - Upload PDFs and Search"
     )
@@ -301,26 +306,22 @@ def main():
     args = parser.parse_args()
 
     if args.command == "upload":
-        asyncio.run(
-            upload_pdf(
-                pdf_path=args.pdf_path,
-                chunk_size=args.chunk_size,
-                chunk_overlap=args.chunk_overlap,
-                pages_per_batch=args.pages_per_batch,
-                max_concurrent_batches=args.max_concurrent_batches,
-                clear_existing=args.clear,
-            )
+        await upload_pdf(
+            pdf_path=args.pdf_path,
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+            pages_per_batch=args.pages_per_batch,
+            max_concurrent_batches=args.max_concurrent_batches,
+            clear_existing=args.clear,
         )
     elif args.command == "search":
-        asyncio.run(
-            search_query(
-                query=args.query,
-                top_k_chunks=args.top_k,
-                max_depth=args.max_depth,
-                use_hybrid_search=not args.no_hybrid,
-                vector_weight=args.vector_weight,
-                keyword_weight=args.keyword_weight,
-            )
+        await search_query(
+            query=args.query,
+            top_k_chunks=args.top_k,
+            max_depth=args.max_depth,
+            use_hybrid_search=not args.no_hybrid,
+            vector_weight=args.vector_weight,
+            keyword_weight=args.keyword_weight,
         )
     elif args.command == "delete":
         if not args.confirm:
@@ -330,10 +331,6 @@ def main():
             log.warning("Use --confirm flag to proceed with deletion.")
             log.warning("Example: python src/main.py delete --confirm")
             return
-        asyncio.run(delete_all())
+        await delete_all()
     else:
         parser.print_help()
-
-
-if __name__ == "__main__":
-    main()
